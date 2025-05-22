@@ -3,6 +3,9 @@
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+CMD ?= "generate"
+FLAGS ?=
+
 VERSION ?= $(shell bin/get_version.sh)
 
 ##@ General
