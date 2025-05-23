@@ -12,9 +12,6 @@ import (
 	"strings"
 
 	monitoring "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	networkv1 "k8s.io/api/networking/v1"
-	policyv1 "k8s.io/api/policy/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -44,26 +41,6 @@ func (g *Generator) addToScheme() error {
 	err := clientgoscheme.AddToScheme(g.scheme)
 	if err != nil {
 		return fmt.Errorf("failed to add client-go scheme to runtime scheme: %v", err)
-	}
-
-	err = networkv1.AddToScheme(g.scheme)
-	if err != nil {
-		return fmt.Errorf("failed to add networking scheme to runtime scheme: %v", err)
-	}
-
-	err = policyv1.AddToScheme(g.scheme)
-	if err != nil {
-		return fmt.Errorf("failed to add policy scheme to runtime scheme: %v", err)
-	}
-
-	err = rbacv1.AddToScheme(g.scheme)
-	if err != nil {
-		return fmt.Errorf("failed to add rbac scheme to runtime scheme: %v", err)
-	}
-
-	err = rbacv1.AddToScheme(g.scheme)
-	if err != nil {
-		return fmt.Errorf("failed to add scheduling scheme to runtime scheme: %v", err)
 	}
 
 	err = monitoring.AddToScheme(g.scheme)
