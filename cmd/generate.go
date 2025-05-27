@@ -15,6 +15,6 @@ var generateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generates Go source code.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return generator.NewGenerator(cmd.Context(), inputFilePath).Generate()
+		return generator.NewGenerator(cmd.Context(), inputFilePath, outputFilePath, verbose).Generate()
 	},
 }

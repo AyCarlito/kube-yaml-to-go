@@ -22,17 +22,26 @@ import (
 
 // Generator decodes Kubernetes objects from YAML and generates equivalent Go source code.
 type Generator struct {
-	ctx           context.Context
-	inputFilePath string
-	scheme        *runtime.Scheme
+	ctx      context.Context
+	scheme   *runtime.Scheme
+	out      bytes.Buffer
+	packages map[string]struct{}
+
+	inputFilePath  string
+	outputFilePath string
+	verbose        bool
 }
 
 // NewGenerator returns a new *Generator.
-func NewGenerator(ctx context.Context, inputFilePath string) *Generator {
+func NewGenerator(ctx context.Context, inputFilePath, outputFilePath string, verbose bool) *Generator {
 	return &Generator{
-		ctx:           ctx,
-		inputFilePath: inputFilePath,
-		scheme:        runtime.NewScheme(),
+		ctx:      ctx,
+		scheme:   runtime.NewScheme(),
+		packages: make(map[string]struct{}),
+
+		inputFilePath:  inputFilePath,
+		outputFilePath: outputFilePath,
+		verbose:        verbose,
 	}
 }
 
@@ -45,7 +54,7 @@ func (g *Generator) addToScheme() error {
 
 	err = monitoring.AddToScheme(g.scheme)
 	if err != nil {
-		return fmt.Errorf("failed to add scheduling scheme to runtime scheme: %v", err)
+		return fmt.Errorf("failed to add monitoring scheme to runtime scheme: %v", err)
 	}
 
 	return nil
@@ -81,7 +90,7 @@ func (g *Generator) Generate() error {
 	}
 
 	documents := strings.Split(string(fileBytes), yamlDocumentDelimiter)
-	for _, document := range documents {
+	for i, document := range documents {
 		// Skip invalid documents.
 		if document == "" {
 			log.Info("Skipping invalid document")
@@ -93,21 +102,47 @@ func (g *Generator) Generate() error {
 		}
 		log.Info("Generating source for: " + kind.String())
 
-		var buf bytes.Buffer
-		g.dump(&buf, reflect.ValueOf(obj))
-		formattedBytes, err := format.Source(buf.Bytes())
-		if err != nil {
-			return fmt.Errorf("failed to format generated source code: %v", err)
+		// In verbose output, each converted document is stored as a variable.
+		if g.verbose {
+			g.out.Write([]byte(fmt.Sprintf("var %sDocumentIndex%d = ", kind.Kind, i)))
 		}
-
-		// TODO: Need the option to write to file (or several files)
-		fmt.Println(string(formattedBytes))
+		g.dump(reflect.ValueOf(obj))
+		g.out.Write(newLineBytes)
 	}
+
+	f = os.Stdout
+	if g.outputFilePath != "" {
+		f, err = os.Create(g.outputFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %v", err)
+		}
+		defer f.Close()
+	}
+	outputBytes := g.out.Bytes()
+
+	// In verbose output, add the imports used across the types.
+	if g.verbose {
+		var imports []string
+		for k := range g.packages {
+			if k != "" {
+				imports = append(imports, k)
+			}
+		}
+		outputBytes = []byte(fmt.Sprintf(outputTemplate, strings.Join(imports, "\n"), string(outputBytes)))
+	}
+
+	// Run "gofmt" on the generated source. This accepts full and partial source files.
+	formattedBytes, err := format.Source(outputBytes)
+	if err != nil {
+		return fmt.Errorf("failed to format generated source code: %v", err)
+	}
+	f.Write(formattedBytes)
+
 	return nil
 }
 
 // dump recursively dumps the provided reflect.Value.
-func (g *Generator) dump(w io.Writer, v reflect.Value) {
+func (g *Generator) dump(v reflect.Value) {
 	kind := v.Kind()
 	if kind == reflect.Invalid {
 		return
@@ -115,69 +150,72 @@ func (g *Generator) dump(w io.Writer, v reflect.Value) {
 
 	switch kind {
 	case reflect.Ptr:
-		w.Write(addressBytes)
+		g.out.Write(addressBytes)
 		if v.Elem().Type().Kind() == reflect.Struct {
-			g.dump(w, v.Elem())
+			g.dump(v.Elem())
 			return
 		}
-		w.Write(openSquareBracketBytes)
-		w.Write(closeSquareBracketBytes)
-		w.Write([]byte(v.Elem().Type().String()))
-		w.Write(openBraceBytes)
-		g.dump(w, v.Elem())
-		w.Write(closeBraceBytes)
-		w.Write(zeroIndexBytes)
+		g.out.Write(openSquareBracketBytes)
+		g.out.Write(closeSquareBracketBytes)
+		g.out.Write([]byte(v.Elem().Type().String()))
+		g.out.Write(openBraceBytes)
+		g.dump(v.Elem())
+		g.out.Write(closeBraceBytes)
+		g.out.Write(zeroIndexBytes)
 
 	case reflect.String:
-		w.Write([]byte(strconv.Quote(v.String())))
+		g.out.Write([]byte(strconv.Quote(v.String())))
 
 	case reflect.Bool:
-		w.Write([]byte(strconv.FormatBool(v.Bool())))
+		g.out.Write([]byte(strconv.FormatBool(v.Bool())))
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		w.Write([]byte(strconv.FormatInt(v.Int(), 10)))
+		g.out.Write([]byte(strconv.FormatInt(v.Int(), 10)))
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		w.Write([]byte(strconv.FormatUint(v.Uint(), 10)))
+		g.out.Write([]byte(strconv.FormatUint(v.Uint(), 10)))
 
 	case reflect.Float32:
-		w.Write([]byte(strconv.FormatFloat(v.Float(), 'g', -1, 32)))
+		g.out.Write([]byte(strconv.FormatFloat(v.Float(), 'g', -1, 32)))
 
 	case reflect.Float64:
-		w.Write([]byte(strconv.FormatFloat(v.Float(), 'g', -1, 64)))
+		g.out.Write([]byte(strconv.FormatFloat(v.Float(), 'g', -1, 64)))
 
 	case reflect.Slice:
-		w.Write([]byte(newAliasedType(v, v.Type().Elem().PkgPath())))
-		w.Write(openBraceBytes)
-		w.Write(newLineBytes)
+		g.packages[importWithAlias(v.Type().Elem().PkgPath())] = struct{}{}
+		g.out.Write([]byte(typeWithAlias(v, v.Type().Elem().PkgPath())))
+		g.out.Write(openBraceBytes)
+		g.out.Write(newLineBytes)
 		numItems := v.Len()
 		for i := range numItems {
-			g.dump(w, v.Index(i))
-			w.Write(commaBytes)
-			w.Write(newLineBytes)
+			g.dump(v.Index(i))
+			g.out.Write(commaBytes)
+			g.out.Write(newLineBytes)
 		}
-		w.Write(newLineBytes)
-		w.Write(closeBraceBytes)
+		g.out.Write(newLineBytes)
+		g.out.Write(closeBraceBytes)
 
 	case reflect.Map:
-		w.Write([]byte(newAliasedType(v, v.Type().PkgPath())))
-		w.Write(openBraceBytes)
-		w.Write(newLineBytes)
+		g.packages[importWithAlias(v.Type().PkgPath())] = struct{}{}
+		g.out.Write([]byte(typeWithAlias(v, v.Type().PkgPath())))
+		g.out.Write(openBraceBytes)
+		g.out.Write(newLineBytes)
 		keys := v.MapKeys()
 		for _, key := range keys {
-			g.dump(w, key)
-			w.Write(colonBytes)
-			g.dump(w, v.MapIndex(key))
-			w.Write(commaBytes)
-			w.Write(newLineBytes)
+			g.dump(key)
+			g.out.Write(colonBytes)
+			g.dump(v.MapIndex(key))
+			g.out.Write(commaBytes)
+			g.out.Write(newLineBytes)
 		}
-		w.Write(newLineBytes)
-		w.Write(closeBraceBytes)
+		g.out.Write(newLineBytes)
+		g.out.Write(closeBraceBytes)
 
 	case reflect.Struct:
-		w.Write([]byte(newAliasedType(v, v.Type().PkgPath())))
-		w.Write(openBraceBytes)
-		w.Write(newLineBytes)
+		g.packages[importWithAlias(v.Type().PkgPath())] = struct{}{}
+		g.out.Write([]byte(typeWithAlias(v, v.Type().PkgPath())))
+		g.out.Write(openBraceBytes)
+		g.out.Write(newLineBytes)
 		numFields := v.NumField()
 		for i := range numFields {
 			// Skip unexported fields.
@@ -190,14 +228,14 @@ func (g *Generator) dump(w io.Writer, v reflect.Value) {
 				continue
 			}
 
-			w.Write([]byte(v.Type().Field(i).Name))
-			w.Write(colonBytes)
-			g.dump(w, v.Field(i))
-			w.Write(commaBytes)
-			w.Write(newLineBytes)
+			g.out.Write([]byte(v.Type().Field(i).Name))
+			g.out.Write(colonBytes)
+			g.dump(v.Field(i))
+			g.out.Write(commaBytes)
+			g.out.Write(newLineBytes)
 		}
-		w.Write(newLineBytes)
-		w.Write(closeBraceBytes)
+		g.out.Write(newLineBytes)
+		g.out.Write(closeBraceBytes)
 	}
 
 }

@@ -12,11 +12,15 @@ import (
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&inputFilePath, "input", "", "Path to input file. Reads from stdin if unset.")
+	rootCmd.PersistentFlags().StringVar(&outputFilePath, "output", "", "Path to output file. Writes to stdout if unset.")
+	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enables verbose output. Generates a full source file.")
 }
 
 // CLI Flags
 var (
-	inputFilePath string
+	inputFilePath  string
+	outputFilePath string
+	verbose        bool
 )
 
 var rootCmd = &cobra.Command{
