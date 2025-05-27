@@ -10,7 +10,7 @@ func init() {
 	rootCmd.AddCommand(generateCmd)
 }
 
-// generateCmd is the command for generating Go source code from Kubernetes YAML files.
+// generateCmd is the command for generating Go source code from Kubernetes YAML.
 var generateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generates Go source code.",

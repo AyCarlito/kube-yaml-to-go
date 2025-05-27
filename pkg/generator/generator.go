@@ -45,7 +45,7 @@ func NewGenerator(ctx context.Context, inputFilePath, outputFilePath string, ver
 	}
 }
 
-// addToScheme registers types with the runtime.Scheme, allowing serializing and deserializing of objects.
+// addToScheme registers types with the runtime.Scheme, allowing serialization and deserialization of objects.
 func (g *Generator) addToScheme() error {
 	err := clientgoscheme.AddToScheme(g.scheme)
 	if err != nil {
@@ -120,7 +120,7 @@ func (g *Generator) Generate() error {
 	}
 	outputBytes := g.out.Bytes()
 
-	// In verbose output, add the imports used across the types.
+	// In verbose output, add the imports required by the types.
 	if g.verbose {
 		var imports []string
 		for k := range g.packages {
