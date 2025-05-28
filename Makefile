@@ -73,6 +73,19 @@ docker-build: ## Build docker image.
 docker-push: ## Push docker image.
 	docker push ${IMG}
 
+##@ Release
+.PHONY: generate-latest-tag
+generate-latest-tag: ## Generates the latest tag.
+	./bin/bump_tag.sh
+
+.PHONY: create-release-branch 
+create-release-branch: generate-latest-tag ## Creates a release branch.
+	./bin/release.sh
+
+.PHONY: create-release-notes
+create-release-notes:  ## Creates release notes.
+	./bin/generate_release_notes.sh
+
 ##@ Build Dependencies
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
