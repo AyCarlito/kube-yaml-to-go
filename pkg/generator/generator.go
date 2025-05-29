@@ -157,7 +157,8 @@ func (g *Generator) dump(v reflect.Value) {
 		}
 		g.out.Write(openSquareBracketBytes)
 		g.out.Write(closeSquareBracketBytes)
-		g.out.Write([]byte(v.Elem().Type().String()))
+		g.packages[importWithAlias(v.Type().Elem().PkgPath())] = struct{}{}
+		g.out.Write([]byte(strings.TrimPrefix(typeWithAlias(v, v.Type().Elem().PkgPath()), "*")))
 		g.out.Write(openBraceBytes)
 		g.dump(v.Elem())
 		g.out.Write(closeBraceBytes)
