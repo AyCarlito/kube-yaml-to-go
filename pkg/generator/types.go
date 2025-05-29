@@ -62,5 +62,5 @@ func typeWithAlias(v reflect.Value, path string) string {
 	}
 	packagePathParts := strings.Split(path, "/")
 	alias := packagePathParts[len(packagePathParts)-2] + packagePathParts[len(packagePathParts)-1]
-	return strings.Replace(v.Type().String(), "v1", alias, -1)
+	return strings.Replace(v.Type().String(), packagePathParts[len(packagePathParts)-1], alias, -1)
 }
