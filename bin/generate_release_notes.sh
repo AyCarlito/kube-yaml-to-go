@@ -3,7 +3,7 @@
 GIT_ROOT="$(git rev-parse --show-toplevel)"
 readonly GIT_ROOT
 
-PULL_REQUEST_BASE="https:\/\/github.com\/AyCarlito\/kube-visualization\/pull"
+PULL_REQUEST_BASE="https:\/\/github.com\/AyCarlito\/kube-yaml-to-go\/pull"
 readonly PULL_REQUEST_BASE
 
 latest_tag=$(git describe --tags --abbrev=0)
@@ -36,5 +36,5 @@ if [ -n "${fixes}" ]; then
     printf "\nFixes:\n\n%s\n" "${fixes}" >> "${changelog}"
 fi
 
-# Consider the pattern (#19), we replace it with "[#19](https://github.com/AyCarlito/kube-visualization/pull/19)".
+# Consider the pattern (#19), we replace it with "[#19](https://github.com/AyCarlito/kube-yaml-to-go/pull/19)".
 sed -i -E "s|(#([0-9]+))|[#\2](${PULL_REQUEST_BASE}/\2)|g" "${changelog}"
